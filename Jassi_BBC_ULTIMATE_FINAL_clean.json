@@ -1,0 +1,1318 @@
+{
+  "name": "Jassi BBC - ULTIMATE FINAL",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jassi-telegram",
+        "options": {}
+      },
+      "id": "c03a1daf-a0f2-46e9-a944-0928775688e7",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        208
+      ],
+      "webhookId": "8dfd5186-8716-40b1-baee-e95bae7626d2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawInput = $input.first().json;\nconst body = rawInput.body || rawInput;\nconst message = body.message || {};\nconst msg = message.text || message.caption || '';\nconst phone = String(message.chat?.id || message.from?.id || '');\nconst lower = msg.toLowerCase().trim();\nconst lines = msg.trim().split('\\n').map(l => l.trim()).filter(l => l);\nconst hasImage = !!(message.photo && message.photo.length > 0);\nconst fileId = hasImage ? message.photo[message.photo.length-1].file_id : null;\n\n// Detect BBC office format:\n// Line1=destination, Line2=lorry, Line3=M.phone, Line4=RATE.amount\nconst line2clean = (lines[1] || '').replace(/\\s+/g,'');\nconst isBBCFormat = lines.length >= 3 &&\n  /^[A-Z]{2}\\d{2}[A-Z]{1,3}\\d{4}$/i.test(line2clean) &&\n  lines.some(l => /^M\\./i.test(l.trim()) || /^RATE\\./i.test(l.trim()));\n\nconst cleanMsg = msg.replace(/\\s+/g,'');\nconst lorryMatch = cleanMsg.match(/[A-Z]{2}\\d{2}[A-Z]{1,3}\\d{4}/i);\nconst lorryNumber = lorryMatch ? lorryMatch[0].toUpperCase() : '';\n\nlet intent = 'GENERAL';\nconst greetWords = ['hi','hello','hey','hlo','sat sri akal','satsriakal','namaste','jai hind','good morning','good evening','waheguru','ssa'];\nif (greetWords.some(g => lower === g || lower.startsWith(g+' '))) intent = 'GREETING';\nelse if (isBBCFormat) intent = 'NEW_TRIP';\nelse if (lower.includes('history') || lower.includes('batao purana') || (lower.includes('record') && (lorryNumber || lower.includes('all') || lower.includes('sab')))) intent = 'HISTORY';\nelse if (lower.includes('load') || lower.includes('dispatch') || lower.includes('naya trip') || lower.includes('new trip')) intent = 'NEW_TRIP';\nelse if (lower.includes('new driver') || lower.includes('naya driver') || lower.includes('add driver')) intent = 'DRIVER';\nelse if ((lower.includes('all') || lower.includes('sab') || lower.includes('sabka')) && (lower.includes('commission') || lower.includes('payment')) && (lower.includes('paid') || lower.includes('clear') || lower.includes('ho gaya'))) intent = 'ALL_PAID';\nelse if (lower.includes('paid') || lower.includes('payment') || (lower.includes('commission') && (lower.includes('de') || lower.includes('diya') || lower.includes('mila') || lower.includes('paid') || lower.includes('ho gaya')))) intent = 'PAYMENT';\nelse if (lower.includes('pahunch') || lower.includes('arrived') || lower.includes('aa gaya') || lower.includes('reached') || lower.includes('pahuncha')) intent = 'ARRIVED';\nelse if (lower.includes('cancel')) intent = 'CANCEL';\nelse if (lower.includes('reminder') || lower.includes('crsl') || lower.includes('due')) intent = 'REMINDER';\nelse if (lower.includes('report') || lower.includes('weekly') || lower.includes('summary') || lower.includes('stats')) intent = 'REPORT';\nelse if (hasImage) intent = 'IMAGE';\n\nreturn [{ json: { msg, phone, lorryNumber, intent, today: new Date().toLocaleDateString('en-IN'), fileId, hasImage, isBBCFormat, lines } }];"
+      },
+      "id": "3b3db3d6-5f6f-4dea-a62f-a4f0701cdf48",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "hist",
+              "leftValue": "={{ $json.intent }}",
+              "rightValue": "HISTORY",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "f6a0d0c8-3e11-456d-bc2f-4e66b80425b5",
+      "name": "Is History?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/lorry_full_history?{{ $('Parse Input').first().json.lorryNumber ? 'lorry_number=eq.'+$('Parse Input').first().json.lorryNumber+'&' : '' }}select=lorry_number,loaded_date,loading_point,unloading_point,party_name,rate,trip_status,expected_arrival_date,commission_amount,commission_status,driver_phone,amount_paid,amount_pending,payment_status&order=loaded_date.desc&limit=100",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value":"Your_API_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Your_Authorisation_key"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0680b8fc-702a-4f7d-a23e-608a70923028",
+      "name": "Get Lorry History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/trips?select=lorry_number,loading_point,unloading_point,party_name,rate,loaded_date,expected_arrival_date,trip_status,commission_amount,commission_status,driver_phone&trip_status=neq.cancelled&order=created_at.desc&limit=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_ANON_KEY_HERE"
+            },
+            {
+              "name": "Authorization",
+              "value": YOUR_SUPABASE_ANON_KEY_HERE
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f5cd0972-ef21-46f9-b454-cd1d043103e2",
+      "name": "Get Active Trips",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        224,
+        208
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/commission_reminders?select=reminder_date,arrival_date,commission_amount,reminder_status,payment_status&reminder_status=eq.pending&order=reminder_date.asc&limit=10",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_KEY_HERE"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "26c3787c-e026-418b-8b06-ca83a4ed2499",
+      "name": "Get Reminders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        448,
+        208
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/drivers?select=name,phone,vehicle_number,reliability_score,risk_category,total_pending_commission&order=total_pending_commission.desc&limit=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_KEY_HERE"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7fcbc09f-e66a-4ab6-b495-f28a7b6d5870",
+      "name": "Get Drivers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        672,
+        208
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/conversations?phone=eq.{{ encodeURIComponent($('Parse Input').first().json.phone) }}&created_at=gte.{{ new Date(Date.now()-10*24*60*60*1000).toISOString() }}&select=role,content&order=created_at.asc&limit=20",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_KEY_HERE"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0f17287e-f7e7-4382-b04e-fb0f3bfc9269",
+      "name": "Fetch Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        880,
+        208
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN_HERE/getFile?file_id={{ $('Parse Input').first().json.fileId || 'none' }}",
+        "options": {}
+      },
+      "id": "1d5a2626-3556-4ad4-a0a5-59956bfd63f1",
+      "name": "Get File Path",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1104,
+        208
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/file/botYOUR_TELEGRAM_BOT_TOKEN_HERE/{{ $('Get File Path').first().json.result.file_path }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "f23d61ed-ad92-4f44-8bb7-06f93350fa75",
+      "name": "Fetch Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1328,
+        208
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Parse Input').first().json;\nlet history=[], trips=[], reminders=[], drivers=[], memory=[];\ntry { history = $('Get Lorry History').all().map(i=>i.json).filter(i=>i&&i.lorry_number); } catch(e){}\ntry { trips = $('Get Active Trips').all().map(i=>i.json).filter(i=>i&&i.lorry_number); } catch(e){}\ntry { reminders = $('Get Reminders').all().map(i=>i.json).filter(i=>i&&i.reminder_date); } catch(e){}\ntry { drivers = $('Get Drivers').all().map(i=>i.json).filter(i=>i&&i.name); } catch(e){}\ntry { memory = $('Fetch Memory').all().map(i=>i.json).filter(i=>i&&i.role); } catch(e){}\n\nlet historyContext = '';\nif (input.intent === 'HISTORY') {\n  if (history.length > 0) {\n    let tc=0, tp=0, tpaid=0;\n    history.forEach(h=>{\n      tc+=parseFloat(h.commission_amount||0);\n      if(h.commission_status==='paid') tpaid+=parseFloat(h.commission_amount||0);\n      else tp+=parseFloat(h.commission_amount||0);\n    });\n    historyContext = 'RECORDS('+history.length+'):'+JSON.stringify(history)+'|TOTAL_COMM:'+tc.toFixed(0)+'|PAID:'+tpaid.toFixed(0)+'|PENDING:'+tp.toFixed(0);\n  } else {\n    historyContext = input.lorryNumber ? 'No records for '+input.lorryNumber : 'No history found.';\n  }\n}\n\nconst systemPrompt = `You are Jassi, AI Manager BBC Bikaner Bangalore Carrier, Bangalore. Reply same language as broker (Hindi/English/Hinglish). No emojis. Short replies.\n\nGREETING: If intent GREETING reply ONLY: Sat Sri Akal Ji! Main Jassi aan, BBC di AI Manager. Dasao ki kaam hai?\n\nLOADING POINT RULE: loading_point is ALWAYS \"Bangalore\". Never ask. Never change it.\n\nBBC OFFICE MESSAGE FORMAT - When broker sends in this format:\nLine 1: Destination city (unloading point)\nLine 2: Lorry number (e.g. RJ19GE4481)\nLine 3: M.XXXXXXXXXX (driver mobile - remove M. prefix)\nLine 4: RATE.XXXXXX or just amount (rate/hire - ignore weight like 20.TN)\nExtract: lorry=line2, TO=line1, DPHONE=line3(remove M.), RATE=line4(numbers only), FROM=Bangalore always\nSave immediately. End with: ||ACTION:NEW_TRIP|LORRY:L|FROM:Bangalore|TO:city|RATE:amount|DPHONE:phone|DATE:today||\n\nIMAGE RULE: Read image text carefully. Extract trip details. Caption may say commission paid/pending/amount. Save accordingly. IMPORTANT: Kharcha means driver expense - do NOT record as commission. Commission is only what BBC receives from broker.\n\nDRIVER PHONE: If asked \"X lorry driver ka number\" - search trips data and give driver_phone for that lorry.\n\nCOMMISSION RULES:\n1. Always extract commission when mentioned\n2. \"commission paid AMOUNT for LORRY\" = mark that specific lorry trip paid\n3. \"all commission paid\" / \"sabka commission paid\" / \"sab paid\" = mark ALL active trips paid\n4. Show commission status in all history replies\n5. Pending commission = still to receive. Paid = already received.\n\nSAVE RULES:\n1. Never ask confirmation. Save immediately.\n2. Partial data ok. Null for missing.\n3. HISTORY: Each trip: Date|Route|Driver Phone|Rate|Commission|Status. Totals at end.\n4. NEW_TRIP last line ONLY: ||ACTION:NEW_TRIP|LORRY:L|FROM:Bangalore|TO:T|PARTY:P|RATE:R|DATE:D|ARRIVAL:A|COMMISSION:C|DPHONE:DP||\n5. NEW_DRIVER last line ONLY: ||ACTION:NEW_DRIVER|NAME:N|PHONE:P|TRUCK:T||\n6. ARRIVED last line ONLY: ||ACTION:ARRIVED|LORRY:L||\n7. CANCEL last line ONLY: ||ACTION:CANCEL|LORRY:L||\n8. PAYMENT per trip last line ONLY: ||ACTION:PAYMENT_PAID|LORRY:L|AMOUNT:A||\n9. ALL COMMISSIONS PAID last line ONLY: ||ACTION:ALL_COMMISSION_PAID||\n10. GENERAL short reply.\n\nDATA: INTENT=${input.intent} LORRY=${input.lorryNumber} TODAY=${input.today}${historyContext?' HISTORY='+historyContext:''} TRIPS=${JSON.stringify(trips.slice(0,10))} REMINDERS=${JSON.stringify(reminders.slice(0,5))} DRIVERS=${JSON.stringify(drivers.slice(0,10))}`;\n\nconst messages = [];\nmemory.slice(-18).forEach(m => { if (m.role && m.content) messages.push({role: m.role, content: String(m.content)}); });\n\nif (input.hasImage && input.fileId) {\n  try {\n    const filePath = $('Get File Path').first().json?.result?.file_path;\n    if (filePath) {\n      const imageUrl = `https://api.telegram.org/file/botYOUR_TELEGRAM_BOT_TOKEN_HERE/${filePath}`;\n      const response = await helpers.httpRequest({\n        method: 'GET',\n        url: imageUrl,\n        encoding: 'arraybuffer'\n      });\n      const base64Image = Buffer.from(response).toString('base64');\n      if (base64Image && base64Image.length > 100) {\n        messages.push({\n          role: 'user',\n          content: [\n            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Image } },\n            { type: 'text', text: input.msg || 'Extract trip details from this image.' }\n          ]\n        });\n      } else {\n        messages.push({role: 'user', content: (input.msg||'') + ' [Image error. Please resend.]'});\n      }\n    } else {\n      messages.push({role: 'user', content: input.msg||''});\n    }\n  } catch(e) {\n    messages.push({role: 'user', content: (input.msg||'') + ' [Image error: ' + e.message + ']'});\n  }\n} else {\n  messages.push({role: 'user', content: input.msg});\n}\n\nconst requestBody = { model: 'claude-sonnet-4-6', max_tokens: 600, system: systemPrompt, messages: messages };\nreturn [{json: { brokerMessage: input.msg, brokerPhone: input.phone, intent: input.intent, lorryNumber: input.lorryNumber, requestBody: JSON.stringify(requestBody) }}];\n"
+      },
+      "id": "10dd46fb-b4d9-480d-bc94-9477098cb723",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": ""
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Build Context').first().json.requestBody }}",
+        "options": {}
+      },
+      "id": "b3720f72-1d4b-43a9-97f8-aba3e9f675d9",
+      "name": "Jassi Brain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1760,
+        208
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "function cleanDate(val) {\n  if (!val || val === 'null' || val === 'undefined' || val.trim() === '') return null;\n  const v = val.trim();\n  if (v.includes('/')) {\n    const parts = v.split('/');\n    if (parts.length === 3) return parts[2]+'-'+parts[1].padStart(2,'0')+'-'+parts[0].padStart(2,'0');\n  }\n  if (v.includes('-') && v.length === 10) return v;\n  return null;\n}\nfunction cleanVal(val) {\n  if (!val || val === 'null' || val === 'undefined' || val.trim() === '') return null;\n  return val.trim();\n}\nfunction cleanNum(val) {\n  if (!val || val === 'null' || val === 'undefined') return null;\n  const n = parseFloat(String(val).replace(/[^0-9.]/g,''));\n  return isNaN(n) ? null : n;\n}\n\nconst brainOutput = $('Jassi Brain').first().json;\nlet rawReply = '';\ntry { rawReply = brainOutput.content[0].text; } catch(e) { rawReply = 'System error. Try again.'; }\n\nlet replyText = rawReply.replace(/\\|\\|ACTION[\\s\\S]*?\\|\\|/g, '').trim();\nconst actionMatch = rawReply.match(/\\|\\|ACTION([\\s\\S]*?)\\|\\|/);\nlet hasAction = false, supabaseTable = '', supabasePayload = '{}', isNewRecord = false, isAllPaid = false;\nlet lorryNumber = $('Parse Input').first().json.lorryNumber || '';\nlet tripDate = new Date().toISOString().split('T')[0];\nlet tripRate = null, tripCommission = null, commissionStatus = 'pending';\n\nif (actionMatch) {\n  hasAction = true;\n  const fullAction = 'ACTION' + actionMatch[1];\n  const parts = fullAction.split('|');\n  const actionType = parts[0].replace('ACTION:', '').trim();\n  const kv = {};\n  parts.slice(1).forEach(p => {\n    const idx = p.indexOf(':');\n    if (idx > -1) kv[p.substring(0,idx).trim()] = p.substring(idx+1).trim();\n  });\n\n  lorryNumber = cleanVal(kv['LORRY']) || lorryNumber;\n\n  if (actionType === 'NEW_TRIP') {\n    supabaseTable = 'trips'; isNewRecord = true;\n    tripDate = cleanDate(kv['DATE']) || new Date().toISOString().split('T')[0];\n    tripRate = cleanNum(kv['RATE']);\n    tripCommission = cleanNum(kv['COMMISSION']);\n    commissionStatus = tripCommission ? 'pending' : null;\n    supabasePayload = JSON.stringify({\n      lorry_number: cleanVal(kv['LORRY']),\n      loading_point: 'Bangalore',\n      unloading_point: cleanVal(kv['TO']),\n      party_name: cleanVal(kv['PARTY']),\n      rate: tripRate,\n      loaded_date: tripDate,\n      expected_arrival_date: cleanDate(kv['ARRIVAL']),\n      trip_status: 'active',\n      commission_amount: tripCommission,\n      commission_status: commissionStatus,\n      driver_phone: cleanVal(kv['DPHONE'])\n    });\n  } else if (actionType === 'NEW_DRIVER') {\n    supabaseTable = 'drivers'; isNewRecord = true;\n    supabasePayload = JSON.stringify({\n      name: cleanVal(kv['NAME']),\n      phone: cleanVal(kv['PHONE']),\n      vehicle_number: cleanVal(kv['TRUCK'])\n    });\n  } else if (actionType === 'ARRIVED') {\n    supabaseTable = 'trips'; isNewRecord = false;\n    supabasePayload = JSON.stringify({ trip_status: 'arrived' });\n  } else if (actionType === 'CANCEL') {\n    supabaseTable = 'trips'; isNewRecord = false;\n    supabasePayload = JSON.stringify({ trip_status: 'cancelled' });\n  } else if (actionType === 'PAYMENT_PAID') {\n    supabaseTable = 'trips'; isNewRecord = false;\n    commissionStatus = 'paid';\n    supabasePayload = JSON.stringify({\n      amount_paid: cleanNum(kv['AMOUNT']),\n      commission_status: 'paid',\n      payment_status: 'paid'\n    });\n  } else if (actionType === 'ALL_COMMISSION_PAID') {\n    supabaseTable = 'trips'; isNewRecord = false; isAllPaid = true;\n    lorryNumber = '';\n    commissionStatus = 'paid';\n    supabasePayload = JSON.stringify({ commission_status: 'paid' });\n  }\n}\n\nreturn [{json: {\n  replyText: replyText || 'OK',\n  hasAction, supabaseTable, supabasePayload,\n  lorryNumber, isNewRecord, isAllPaid,\n  tripDate, tripRate, tripCommission, commissionStatus,\n  brokerPhone: $('Parse Input').first().json.phone\n}}];"
+      },
+      "id": "e1092927-f1d2-4c93-ac6a-4fb947cc3ab4",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN_HERE/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({chat_id: String($json.brokerPhone), text: $json.replyText}) }}",
+        "options": {}
+      },
+      "id": "2f77fc15-0561-4b81-b215-23e327cee6ed",
+      "name": "Send Telegram Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2208,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = $('Parse Input').first().json.phone;\nconst userMsg = $('Parse Input').first().json.msg;\nconst replyText = $('Parse Reply').first().json.replyText;\nconst memoryBody = JSON.stringify([\n  {phone: phone, role: 'user', content: userMsg},\n  {phone: phone, role: 'assistant', content: replyText}\n]);\nreturn [{json: {memoryBody}}];"
+      },
+      "id": "f9d27247-20bb-4e7b-af9a-1532ea056ef0",
+      "name": "Prepare Memory",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/conversations",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": YOUR_SUPABASE_ANON_KEY_HERE
+            },
+            {
+              "name": "Authorization",
+              "value": YOUR_SUPABASE_ANON_KEY_HERE
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.memoryBody }}",
+        "options": {}
+      },
+      "id": "0663117a-7cbd-4dc0-9598-d0c00f95258b",
+      "name": "Save Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2432,
+        208
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "act",
+              "leftValue": "={{ $json.hasAction ? 'true' : 'false' }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fc03e11d-eb49-440b-b4e7-c4300aae5897",
+      "name": "Has Action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "isnew",
+              "leftValue": "={{ $json.isNewRecord ? 'true' : 'false' }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "353f5d66-3ca5-418e-8496-e22680486384",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2432,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/{{ $('Parse Reply').first().json.supabaseTable }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_ANON_KEY_HERE"
+            },
+            {
+              "name": "Authorization"
+              "value" : YOUR_SUPABASE_ANON_KEY_HERE
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Parse Reply').first().json.supabasePayload }}",
+        "options": {}
+      },
+      "id": "d183f3a0-dd76-4e89-9aef-f3645eaf0d11",
+      "name": "Save New Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2640,
+        304
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1z_ACNDWBaVgVF3gjdxWnl3TKzdI0Xav4cXk0AOOUpK0/edit",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Jassi Report",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "       Date": "={{ $('Parse Reply').first().json.tripDate }}",
+            " Lorry Number": "={{ $('Parse Reply').first().json.lorryNumber }}",
+            "          To": "={{ JSON.parse($('Parse Reply').first().json.supabasePayload).unloading_point || '' }}",
+            "        From": "Bangalore",
+            "       Rate": "={{ $('Parse Reply').first().json.tripRate }}",
+            "  Commission": "={{ $('Parse Reply').first().json.tripCommission }}",
+            "      Status": "={{ $('Parse Reply').first().json.commissionStatus || 'pending' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "       Date",
+              "displayName": "       Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " Lorry Number",
+              "displayName": " Lorry Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "        From",
+              "displayName": "        From",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "          To",
+              "displayName": "          To",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "       Rate",
+              "displayName": "       Rate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "  Commission",
+              "displayName": "  Commission",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "      Status",
+              "displayName": "      Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "5e78271a-8587-4af5-bc6c-5a4b2e19c294",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        2848,
+        304
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qY6jh3VxpjCC3MGQ",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/{{ $('Parse Reply').first().json.supabaseTable }}{{ $('Parse Reply').first().json.lorryNumber ? '?lorry_number=eq.'+$('Parse Reply').first().json.lorryNumber : '?commission_status=eq.pending&trip_status=eq.active' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_KEY_HERE"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_KEY_HERE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Parse Reply').first().json.supabasePayload }}",
+        "options": {}
+      },
+      "id": "2b1395d2-ebf9-4bb5-8fc0-45f2a9d1cd28",
+      "name": "Update Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2640,
+        512
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "49fa032f-85b7-4455-8d4a-a96365503186",
+      "name": "Error Watchdog",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN_HERE/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({chat_id: \"8512778576\", text: 'Jassi Error: ' + ($json.error?.message || 'Unknown') + ' | Node: ' + ($json.execution?.lastNodeExecuted || 'unknown')}) }}",
+        "options": {}
+      },
+      "id": "1d098531-5301-4f02-a484-31f69e8e6ce5",
+      "name": "Send Error Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -448,
+        704
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "f5fca36a-7df1-4401-9a03-356dab79ae30",
+      "name": "Daily 9AM CRSL",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/crsl_dashboard?select=*&reminder_status=eq.pending&order=reminder_date.asc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_KEY_HERE"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "00a9789c-7fb1-4eee-8c48-3cc737b109df",
+      "name": "Get CRSL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -448,
+        912
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst today = new Date().toLocaleDateString('en-IN');\nif (!items || items.length === 0) return [{json:{message:'No pending CRSL today. All clear.'}}];\nconst pending = items.filter(i => i.json && (i.json.lorry_number || i.json.commission_amount));\nif (pending.length === 0) return [{json:{message:'No pending CRSL today. All clear.'}}];\nlet total = 0;\nlet msg = 'BBC CRSL - '+today+'\\nPending commissions:';\npending.forEach(i => {\n  const d = i.json;\n  const flag = d.urgency_flag ? ' ** URGENT **' : '';\n  const comm = d.commission_amount || d.amount_pending || 0;\n  total += parseFloat(comm);\n  msg += '\\n'+(d.lorry_number||'?')+' | Rs.'+comm+' | Arrival: '+(d.arrival_date||d.expected_arrival_date||'TBD')+flag;\n});\nmsg += '\\n\\nTotal Pending: Rs.'+total.toFixed(0);\nreturn [{json:{message:msg}}];"
+      },
+      "id": "c1b34491-aef3-4bd1-8ff6-508736a56d47",
+      "name": "Format CRSL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN_HERE/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({chat_id: \"8512778576\", text: $json.message}) }}",
+        "options": {}
+      },
+      "id": "11d746c7-b908-4076-b5a3-df253f2fc68f",
+      "name": "Send CRSL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        0,
+        912
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "fadc0499-db68-4c9a-bda6-c874b556aa5a",
+      "name": "Weekly Monday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR_SUPABASE_PROJECT_ID.supabase.co/rest/v1/driver_weekly_summary?select=driver_name,driver_phone,risk_category,trips_this_week,commission_this_week,paid_this_week,pending_this_week&order=pending_this_week.desc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_SERVICE_KEY_HERE"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_SERVICE_KEY_HERE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1c6d8aab-80ea-4358-972b-260752898a84",
+      "name": "Get Weekly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -448,
+        1104
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const items=$input.all();\nlet trips=0,comm=0,paid=0,pending=0,paidList='',pendingList='';\nitems.forEach(i=>{\n  const d=i.json;\n  if(!d||!d.driver_name)return;\n  trips+=parseInt(d.trips_this_week||0);\n  comm+=parseFloat(d.commission_this_week||0);\n  paid+=parseFloat(d.paid_this_week||0);\n  pending+=parseFloat(d.pending_this_week||0);\n  if(parseFloat(d.paid_this_week||0)>0) paidList+='\\n- '+d.driver_name+': Rs.'+parseFloat(d.paid_this_week).toFixed(0);\n  if(parseFloat(d.pending_this_week||0)>0){\n    const r=d.risk_category==='red'?'[RED]':d.risk_category==='yellow'?'[YLW]':'[OK]';\n    pendingList+='\\n'+r+' '+d.driver_name+': Rs.'+parseFloat(d.pending_this_week).toFixed(0);\n  }\n});\nconst today=new Date().toLocaleDateString('en-IN');\nconst msg='Weekly Report BBC\\n'+today+'\\n\\nTrips: '+trips+'\\nTotal Commission: Rs.'+comm.toFixed(0)+'\\nPaid: Rs.'+paid.toFixed(0)+'\\nPending: Rs.'+pending.toFixed(0)+'\\n\\nPaid this week:'+(paidList||'\\nNone')+'\\\\n\\nPending:'+(pendingList||'\\nAll clear!');\nreturn [{json:{message:msg}}];"
+      },
+      "id": "94ba6dda-93b2-4d93-83aa-fe75ef39cb3e",
+      "name": "Format Weekly",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN_HERE/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({chat_id: \"8512778576\", text: $json.message}) }}",
+        "options": {}
+      },
+      "id": "68cc2950-b454-4a79-9ee5-9edd6cc203f9",
+      "name": "Send Weekly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        0,
+        1104
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1z_ACNDWBaVgVF3gjdxWnl3TKzdI0Xav4cXk0AOOUpK0/edit",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Jassi Report",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "      Status": "=={{ $('Parse Reply').first().json.commissionStatus }}",
+            " Lorry Number": "=={{ $('Parse Reply').first().json.lorryNumber }}"
+          },
+          "matchingColumns": [
+            "Lorry Number"
+          ],
+          "schema": [
+            {
+              "id": "       Date",
+              "displayName": "       Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": " Lorry Number",
+              "displayName": " Lorry Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "        From",
+              "displayName": "        From",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "          To",
+              "displayName": "          To",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "       Rate",
+              "displayName": "       Rate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "  Commission",
+              "displayName": "  Commission",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "      Status",
+              "displayName": "      Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "939152e6-fc72-4b30-9421-3e9d4bc0b804",
+      "name": "Update Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        2896,
+        464
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qY6jh3VxpjCC3MGQ",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Is History?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is History?": {
+      "main": [
+        [
+          {
+            "node": "Get Lorry History",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Active Trips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lorry History": {
+      "main": [
+        [
+          {
+            "node": "Get Active Trips",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Trips": {
+      "main": [
+        [
+          {
+            "node": "Get Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Reminders": {
+      "main": [
+        [
+          {
+            "node": "Get Drivers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Drivers": {
+      "main": [
+        [
+          {
+            "node": "Fetch Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Memory": {
+      "main": [
+        [
+          {
+            "node": "Get File Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File Path": {
+      "main": [
+        [
+          {
+            "node": "Fetch Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Image": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Jassi Brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jassi Brain": {
+      "main": [
+        [
+          {
+            "node": "Parse Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Memory",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Action?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Memory": {
+      "main": [
+        [
+          {
+            "node": "Save Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Action?": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Save New Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Record",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save New Record": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Watchdog": {
+      "main": [
+        [
+          {
+            "node": "Send Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 9AM CRSL": {
+      "main": [
+        [
+          {
+            "node": "Get CRSL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get CRSL": {
+      "main": [
+        [
+          {
+            "node": "Format CRSL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format CRSL": {
+      "main": [
+        [
+          {
+            "node": "Send CRSL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Monday": {
+      "main": [
+        [
+          {
+            "node": "Get Weekly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weekly": {
+      "main": [
+        [
+          {
+            "node": "Format Weekly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Weekly": {
+      "main": [
+        [
+          {
+            "node": "Send Weekly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "bceeb2dc-a4b2-4215-a2df-8322297d6187",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "844aa381ef2a2d1b30dac2c6b0db4c6b16c94cea5e0d055b0028ff8cfbe9770a"
+  },
+  "id": "8HQNbGJLZf9yz3bi",
+  "tags": []
+}
